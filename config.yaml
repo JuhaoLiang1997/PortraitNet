@@ -1,0 +1,44 @@
+# data
+root_path: /workspace/liangjuhao/teaching/PortraitNet
+supervisely_face:
+  root: data/Supervisely_face
+  train: data/splits/supervisely_train.txt
+  valid: data/splits/supervisely_valid.txt
+  test: data/splits/supervisely_test.txt
+
+eg1800:
+  root: data/EG1800
+  train: data/splits/eg1800_train.txt
+  valid: data/splits/eg1800_valid.txt
+  test: data/splits/eg1800_test.txt
+
+output_path: checkpoints/test
+
+istrain: True
+input_height: 224
+input_width: 224
+device: cuda
+# dataset_list: ['eg1800', 'supervisely_face']
+dataset_list: ['eg1800']
+
+padding_color: 128
+img_scale: 1
+img_mean: [103.94, 116.78, 123.68]
+img_val: [0.017, 0.017, 0.017]
+
+
+train:
+  seed: 42
+  n_epoch: 20
+  learning_rate: 0.001
+  weight_decay: 5e-4
+  batch_size: 128
+  workers: 4
+  pretrained_state_dict: /workspace/liangjuhao/teaching/PortraitNet/data/pretrained_mobilenetv2_base.pth
+
+portrait:
+  edgeRatio: 0.1
+  addEdge: True
+  temperature: 1
+  alpha: 2
+  padding_color: 128
