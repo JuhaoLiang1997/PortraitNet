@@ -2,7 +2,6 @@ import torch, hydra, os, logging
 from transformers import set_seed
 from portrait_datasets import PortraitDataset
 from portraitnet import PortraitNet
-from tqdm import tqdm
 from trainer import PortraitTrainer
 
 def get_parameters(model, args):
@@ -21,20 +20,20 @@ def get_parameters(model, args):
 @hydra.main(config_path=".", config_name="config.yaml", version_base='1.1')
 def main(args):
     # logging
-    logging_path = os.path.join(args.output_path, "train.log")
-    os.makedirs(logging_path, exist_ok=True)
+    os.makedirs(args.output_path, exist_ok=True)
+    # logging_path = os.path.join(args.output_path, "train.log")
     logging.basicConfig(
-        filename=logging_path,  # Specify the name of the log file
+        # filename=logging_path,  # Specify the name of the log file
         level=logging.DEBUG,    # Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR)
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
     set_seed(args.train.seed)
 
-    train_dataset = PortraitDataset(args, istrain=True)
-    valid_dataset = PortraitDataset(args, istrain=False)
+    train_dataset = PortraitDataset(args, split='train')
+    valid_dataset = PortraitDataset(args, split='valid')
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.train.batch_size, shuffle=True, num_workers=args.train.workers)
-    valid_dataloader = torch.utils.data.DataLoader(valid_dataset, batch_size=args.train.batch_size, shuffle=True, num_workers=args.train.workers)
+    valid_dataloader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, shuffle=True, num_workers=args.train.workers)
 
     model = PortraitNet(addEdge=True)
     params, multiple = get_parameters(model, args)
@@ -50,7 +49,7 @@ def main(args):
         else:
             unused_params.append(key)
     model.load_state_dict(model_state_dict)
-    print(f"Pretrained param: {len(pretrained_state_dict)}, new model param: {len(model_state_dict)}\ninitialized from pretrained: {used_param_count}/{len(model_state_dict)}\nunused pretrained params: {unused_params}")
+    logging.info(f"Pretrained param: {len(pretrained_state_dict)}, new model param: {len(model_state_dict)}\ninitialized from pretrained: {used_param_count}/{len(model_state_dict)}\nunused pretrained params: {unused_params}")
 
     model.to(args.device)
     
@@ -63,27 +62,7 @@ def main(args):
         multiple=multiple,
     )
     trainer.train()
-    
-    progress_bar = tqdm(total=args.train.n_epoch * len(dataloader), desc='training...')
-    for epoch in range(args.train.n_epoch):
-        lr = args.train.learning_rate * (0.95 ** (epoch // 20))
-        for i, param_group in enumerate(optimizer.param_groups):
-            param_group['lr'] = lr * multiple[i]
-
-        # train
-        
-
-        # test
-        model.eval()
-
-        # save_checkpoint()
-        progress_bar.update(1)
-    
-    progress_bar.close()
-    return 
-
-
-
+    trainer.save()
 
 if __name__ == '__main__':
     main()

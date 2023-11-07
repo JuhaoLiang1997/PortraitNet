@@ -4,17 +4,18 @@ import numpy as np
 from augmentation import *
 
 class PortraitDataset(data.Dataset):
-    def __init__(self, args, istrain):
+    def __init__(self, args, split):
         self.args = args 
-        self.istrain = istrain
+        self.split = split
+        self.istrain = split == 'train'
         self.img_ids = []
         if 'supervisely_face' in args.dataset_list:
-            img_ids = open(os.path.join(args.root_path, args.supervisely_face.train if self.istrain else args.supervisely_face.valid)).readlines()
+            img_ids = open(os.path.join(args.root_path, getattr(args.supervisely_face, split))).readlines()
             img_ids = [(path, 'supervisely_face') for path in img_ids]
             self.img_ids += img_ids
         
         if 'eg1800' in args.dataset_list:
-            img_ids = open(os.path.join(args.root_path, args.eg1800.train if self.istrain else args.eg1800.valid)).readlines()
+            img_ids = open(os.path.join(args.root_path, getattr(args.eg1800, split))).readlines()
             img_ids = [(path, 'eg1800') for path in img_ids]
             self.img_ids += img_ids
         
@@ -27,18 +28,22 @@ class PortraitDataset(data.Dataset):
         if source == 'supervisely_face':
             img_path = os.path.join(self.args.root_path, self.args.supervisely_face.root, img_path.strip())
             annopath = img_path.replace('/img/', '/ann/')
+            img_name = img_path[img_path.rfind('/')+1:]
+            img = cv2.imread(img_path)
+            mask = cv2.imread(annopath, 0)
+            mask[mask>0] = 1
         elif source == 'eg1800':
             img_path = os.path.join(self.args.root_path, self.args.eg1800.root, img_path.strip())
-            annopath = img_path.replace('.jpg', '.png')
+            annopath = img_path.replace('Images', 'Labels').replace('.jpg', '.png')
+            img_name = img_path[img_path.rfind('/')+1:]
+            img = cv2.imread(img_path)
+            mask = cv2.imread(annopath, 0)
+            mask[mask>1] = 0
+            # print(annopath)
+            # print(mask[mask>0])
         else:
             raise NotImplementedError
 
-        img_name = img_path[img_path.rfind('/')+1:]
-        img = cv2.imread(img_path)
-        mask = cv2.imread(annopath, 0)
-        # mask = cv2.imread(annopath.replace('Labels', 'LabelsAug'), 0)
-        mask[mask>1] = 0
-        
         height, width, channel = img.shape
         bbox = [0, 0, width-1, height-1]
         H = aug_matrix(width, height, bbox, self.args.input_width, self.args.input_height,
