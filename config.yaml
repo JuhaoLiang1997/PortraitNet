@@ -30,7 +30,7 @@ img_val: [0.017, 0.017, 0.017]
 train:
   seed: 42
   n_epoch: 2000
-  learning_rate: 1e-2
+  learning_rate: 1e-3
   learning_rate_step: 20
   weight_decay: 5e-4
   batch_size: 64

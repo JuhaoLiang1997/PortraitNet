@@ -5,18 +5,19 @@ from portraitnet import PortraitNet
 from trainer import PortraitTrainer
 import wandb
 
-def get_parameters(model, args):
-    lr_0 = []
-    lr_1 = []
-    params_dict = dict(model.named_parameters())
-    for key, value in params_dict.items():
-        if 'deconv' in key:
-            lr_0.append(value)
-        else:
-            lr_1.append(value)
-    params = [{'params': [param for key, param in params_dict.items() if 'deconv' in key], 'lr': args.train.learning_rate * 0},
-              {'params': [param for key, param in params_dict.items() if 'deconv' not in key], 'lr': args.train.learning_rate * 1}]
-    return params, [0., 1.]
+def print_trainable_parameters(model):
+    """
+    Prints the number of trainable parameters in the model.
+    """
+    trainable_params = 0
+    all_param = 0
+    for _, param in model.named_parameters():
+        all_param += param.numel()
+        if param.requires_grad:
+            trainable_params += param.numel()
+    logging.info(
+        f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
+    )
 
 @hydra.main(config_path=".", config_name="config.yaml", version_base='1.1')
 def main(args):
@@ -39,8 +40,7 @@ def main(args):
     valid_dataloader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, shuffle=True, num_workers=args.train.workers)
 
     model = PortraitNet(addEdge=True)
-    params, multiple = get_parameters(model, args)
-    optimizer = torch.optim.Adam(params, args.train.learning_rate, weight_decay=args.train.weight_decay) 
+    optimizer = torch.optim.Adam(model.parameters(), args.train.learning_rate, weight_decay=args.train.weight_decay) 
 
     pretrained_state_dict = torch.load(args.train.pretrained_state_dict)
     model_state_dict = model.state_dict()
@@ -53,6 +53,7 @@ def main(args):
             unused_params.append(key)
     model.load_state_dict(model_state_dict)
     logging.info(f"Pretrained param: {len(pretrained_state_dict)}, new model param: {len(model_state_dict)}\ninitialized from pretrained: {used_param_count}/{len(model_state_dict)}\nunused pretrained params: {unused_params}")
+    print_trainable_parameters(model)
 
     model.to(args.device)
     
@@ -62,7 +63,6 @@ def main(args):
         optimizer=optimizer, 
         train_dataloader=train_dataloader,
         test_dataloader=valid_dataloader,
-        multiple=multiple,
         wb_logger=wb_logger
     )
     trainer.train()

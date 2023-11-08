@@ -8,7 +8,7 @@ import numpy as np
 import gc
 
 class PortraitTrainer(object):
-    def __init__(self, args, model, optimizer, train_dataloader, test_dataloader, multiple, wb_logger):
+    def __init__(self, args, model, optimizer, train_dataloader, test_dataloader, wb_logger):
         super().__init__()
         
         # train instances
@@ -31,7 +31,6 @@ class PortraitTrainer(object):
         self.optimizer = optimizer
         self.train_dataloader = train_dataloader
         self.test_dataloader = test_dataloader
-        self.multiple = multiple
 
         self.printfreq = 1
         self.output_path = args.output_path
@@ -44,10 +43,9 @@ class PortraitTrainer(object):
         for epoch in tqdm(range(self.n_epoch), postfix='Epoch'):
             lr = self.learning_rate * (0.95 ** (epoch // self.learning_rate_step))
             for i, param_group in enumerate(self.optimizer.param_groups):
-                param_group['lr'] = lr * self.multiple[i]
+                param_group['lr'] = lr
 
             train_loss_dict = self.train_epoch()
-            # logging.info(next(self.model.parameters())[0][0][0][0])
             test_loss = self.test_epoch()
             tqdm.write(f"test loss: {test_loss}, train loss: {train_loss_dict['train_loss']}, lr: {lr}")
             log_info = {"epoch": epoch, "learning_rate": lr, "test_loss": test_loss}
@@ -156,9 +154,10 @@ class PortraitTrainer(object):
             return 1.0*np.sum(sum2)/np.sum(sum1)
         
     def save_checkpoint(self, state, is_best, root, filename='checkpoint.pth.tar'):
-        torch.save(state, os.path.join(root, filename))
         if is_best:
-            shutil.copyfile(os.path.join(root, filename), os.path.join(root, 'model_best.pth.tar'))  
+            torch.save(state, os.path.join(root, 'model_best.pth.tar'))
+        else:
+            torch.save(state, os.path.join(root, filename))
 
     def save(self, filename="saved"):
         path = os.path.join(self.output_path, filename+".pth")

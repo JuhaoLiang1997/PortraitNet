@@ -116,15 +116,12 @@ class ResidualBlock(nn.Module):
     
     
 class PortraitNet(nn.Module):
-    def __init__(self, n_class=2, useUpsample=False, useDeconvGroup=False, addEdge=False, 
-                 channelRatio=1.0, minChannel=16, weightInit=True):
+    def __init__(self, n_class=2, addEdge=False, channelRatio=1.0, minChannel=16, weightInit=True):
         super(PortraitNet, self).__init__()
-
         self.addEdge = addEdge
         self.channelRatio = channelRatio
         self.minChannel = minChannel
-        self.useDeconvGroup = useDeconvGroup
-        
+
         # Encoder Module (MobileNetV2)
         self.stage0 = conv_bn(3, self.depth(32), 3, 2)
         
@@ -163,19 +160,11 @@ class PortraitNet(nn.Module):
         self.stage7 = InvertedResidual(self.depth(160), self.depth(320), 1, 6) # 1/32
         
         # Decoder Module 
-        if useUpsample == True:
-            self.deconv1 = nn.Upsample(scale_factor=2, mode='bilinear')
-            self.deconv2 = nn.Upsample(scale_factor=2, mode='bilinear')
-            self.deconv3 = nn.Upsample(scale_factor=2, mode='bilinear')    
-            self.deconv4 = nn.Upsample(scale_factor=2, mode='bilinear')
-            self.deconv5 = nn.Upsample(scale_factor=2, mode='bilinear')
-        else:
-            groups = self.depth(96) if useDeconvGroup else 1
-            self.deconv1 = nn.ConvTranspose2d(self.depth(96), self.depth(96), groups=groups, kernel_size=4, stride=2, padding=1, bias=False)
-            self.deconv2 = nn.ConvTranspose2d(self.depth(32), self.depth(32), groups=groups, kernel_size=4, stride=2, padding=1, bias=False)
-            self.deconv3 = nn.ConvTranspose2d(self.depth(24), self.depth(24), groups=groups, kernel_size=4, stride=2, padding=1, bias=False)
-            self.deconv4 = nn.ConvTranspose2d(self.depth(16), self.depth(16), groups=groups, kernel_size=4, stride=2, padding=1, bias=False)
-            self.deconv5 = nn.ConvTranspose2d(self.depth(8),  self.depth(8),  groups=groups, kernel_size=4, stride=2, padding=1, bias=False)
+        self.deconv1 = nn.ConvTranspose2d(self.depth(96), self.depth(96), groups=1, kernel_size=4, stride=2, padding=1, bias=False)
+        self.deconv2 = nn.ConvTranspose2d(self.depth(32), self.depth(32), groups=1, kernel_size=4, stride=2, padding=1, bias=False)
+        self.deconv3 = nn.ConvTranspose2d(self.depth(24), self.depth(24), groups=1, kernel_size=4, stride=2, padding=1, bias=False)
+        self.deconv4 = nn.ConvTranspose2d(self.depth(16), self.depth(16), groups=1, kernel_size=4, stride=2, padding=1, bias=False)
+        self.deconv5 = nn.ConvTranspose2d(self.depth(8),  self.depth(8),  groups=1, kernel_size=4, stride=2, padding=1, bias=False)
 
         # Transition Module
         self.transit1 = ResidualBlock(self.depth(320), self.depth(96))
@@ -234,9 +223,6 @@ class PortraitNet(nn.Module):
                 assert m.kernel_size[0] == m.kernel_size[1]
                 initial_weight = make_bilinear_weights(m.kernel_size[0], m.out_channels) # same as caffe
                 m.weight.data.copy_(initial_weight)
-                if self.useDeconvGroup == True:
-                    m.requires_grad = False # use deconvolution as bilinear upsample
-                    print ("freeze deconv")
         pass
 
 if __name__ == '__main__':
