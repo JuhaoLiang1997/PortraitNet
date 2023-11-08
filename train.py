@@ -3,6 +3,7 @@ from transformers import set_seed
 from portrait_datasets import PortraitDataset
 from portraitnet import PortraitNet
 from trainer import PortraitTrainer
+import wandb
 
 def get_parameters(model, args):
     lr_0 = []
@@ -27,8 +28,10 @@ def main(args):
         level=logging.DEBUG,    # Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR)
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+    wb_logger = wandb.init(project='PortraitNet', name=args.experiment_name)
 
     set_seed(args.train.seed)
+    wb_logger.config.update(args)
 
     train_dataset = PortraitDataset(args, split='train')
     valid_dataset = PortraitDataset(args, split='valid')
@@ -60,6 +63,7 @@ def main(args):
         train_dataloader=train_dataloader,
         test_dataloader=valid_dataloader,
         multiple=multiple,
+        wb_logger=wb_logger
     )
     trainer.train()
     trainer.save()

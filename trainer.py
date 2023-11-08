@@ -5,9 +5,10 @@ import torch, shutil, os, logging
 from torch.autograd import Variable
 from tqdm import tqdm
 import numpy as np
+import gc
 
 class PortraitTrainer(object):
-    def __init__(self, args, model, optimizer, train_dataloader, test_dataloader, multiple):
+    def __init__(self, args, model, optimizer, train_dataloader, test_dataloader, multiple, wb_logger):
         super().__init__()
         
         # train instances
@@ -20,6 +21,7 @@ class PortraitTrainer(object):
         self.temperature =  args.portrait.temperature
         self.alpha = args.portrait.alpha
         self.edgeRatio = args.portrait.edgeRatio
+        self.loss_list = args.portrait.loss_list
 
         # train
         self.n_epoch = args.train.n_epoch
@@ -34,6 +36,8 @@ class PortraitTrainer(object):
         self.printfreq = 1
         self.output_path = args.output_path
         self.device = args.device
+        self.wb_logger = wb_logger
+        self.checkpoint_save_interval = args.train.checkpoint_save_interval
 
     def train(self):
         min_loss = 100000
@@ -42,29 +46,42 @@ class PortraitTrainer(object):
             for i, param_group in enumerate(self.optimizer.param_groups):
                 param_group['lr'] = lr * self.multiple[i]
 
-            train_loss = self.train_epoch()
+            train_loss_dict = self.train_epoch()
             # logging.info(next(self.model.parameters())[0][0][0][0])
             test_loss = self.test_epoch()
-            tqdm.write(f"test loss: {test_loss}, train loss: {train_loss}, lr: {lr}")
+            tqdm.write(f"test loss: {test_loss}, train loss: {train_loss_dict['train_loss']}, lr: {lr}")
+            log_info = {"epoch": epoch, "learning_rate": lr, "test_loss": test_loss}
+            log_info.update(train_loss_dict)
+            self.wb_logger.log(log_info)
             if test_loss < min_loss:
                 min_loss = test_loss
                 is_best = True
             else:
                 is_best = False
-            self.save_checkpoint(
-                state={
-                    'epoch': epoch+1,
-                    'loss': test_loss,
-                    'state_dict': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict()
-                },
-                is_best=is_best,
-                root=self.output_path
-            )
+            if is_best or (epoch+1) % self.checkpoint_save_interval == 0:
+                self.save_checkpoint(
+                    state={
+                        'epoch': epoch+1,
+                        'loss': test_loss,
+                        'state_dict': self.model.state_dict(),
+                        'optimizer': self.optimizer.state_dict()
+                    },
+                    is_best=is_best,
+                    root=self.output_path,
+                    filename=f"checkpoint_epoch_{epoch+1}.pth.tar"
+                )
 
     def train_epoch(self):
         self.model.train()
-        train_loss = 0
+        loss_records = {
+            "train_loss": 0.0,
+            "loss_mask": 0.0, 
+            "loss_mask_ori": 0.0,
+            "loss_edge": 0.0,
+            "loss_edge_ori": 0.0,
+            "loss_stability_mask": 0.0,
+            "loss_stability_edge": 0.0
+        }
         for input_ori, input, edge, mask in self.train_dataloader:
             input_ori_var = Variable(input_ori.to(self.device))
             input_var = Variable(input.to(self.device))
@@ -72,31 +89,37 @@ class PortraitTrainer(object):
             mask_var = Variable(mask.to(self.device, dtype=torch.long))
 
             output_mask, output_edge = self.model(input_var)
-            loss_mask = self.loss_softmax(output_mask, mask_var)
-            
-            loss_edge = self.loss_focalloss(output_edge, edge_var) * self.edgeRatio
-            # loss = loss_mask + loss_edge
 
-            # Stability
+            loss_mask = self.loss_softmax(output_mask, mask_var)
+            loss_edge = self.loss_focalloss(output_edge, edge_var) * self.edgeRatio
             output_mask_ori, output_edge_ori = self.model(input_ori_var)
             loss_mask_ori = self.loss_softmax(output_mask_ori, mask_var)
-            
             loss_edge_ori = self.loss_focalloss(output_edge_ori, edge_var) * self.edgeRatio
+            loss_stability_mask = self.loss_kl(output_mask, output_mask_ori.data, self.temperature) * self.alpha
+            loss_stability_edge = self.loss_kl(output_edge, output_edge_ori.data, self.temperature) * self.alpha * self.edgeRatio
+
             
-            loss_stability_mask = self.loss_kl(output_mask, Variable(output_mask_ori.data, requires_grad = False), self.temperature) * self.alpha
-            loss_stability_edge = self.loss_kl(output_edge, Variable(output_edge_ori.data, requires_grad = False), self.temperature) * self.alpha * self.edgeRatio
-                
-            # total loss
-            # loss = loss_mask + loss_mask_ori + loss_edge + loss_edge_ori + loss_stability_mask + loss_stability_edge
-            # loss = loss_mask + loss_mask_ori + loss_stability_mask + loss_edge
-            loss = loss_mask
-            train_loss += loss
-            # logging.info(f"loss_mask: {loss_mask}, loss_mask_ori: {loss_mask_ori}, loss_stability_mask: {loss_stability_mask}, loss_stability_edge: {loss_stability_edge}, loss_edge: {loss_edge}, loss_edge_ori: {loss_edge_ori}")
+            def check_key_value(key, value):
+                if key in self.loss_list:
+                    loss_records[key] += value.detach().item()
+                    return value
+                return 0.0
+            
+            loss=0.0
+            loss+=check_key_value("loss_mask", loss_mask)
+            loss+=check_key_value("loss_edge", loss_edge)
+            loss+=check_key_value("loss_mask_ori", loss_mask_ori)
+            loss+=check_key_value("loss_edge_ori", loss_edge_ori)
+            loss+=check_key_value("loss_stability_mask", loss_stability_mask)
+            loss+=check_key_value("loss_stability_edge", loss_stability_edge)
+
+            loss_records['train_loss']+=loss.detach().item()
 
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-        return train_loss / len(self.train_dataloader)
+            del output_mask_ori, output_edge_ori, loss_mask, loss_edge, loss_mask_ori, loss_edge_ori, loss_stability_edge, loss_stability_mask
+        return {key: value / len(self.train_dataloader) for key, value in loss_records.items()}
 
     def test_epoch(self):
         # switch to eval mode

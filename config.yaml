@@ -1,5 +1,6 @@
 # data
 root_path: /workspace/liangjuhao/teaching/PortraitNet
+experiment_name: mask_loss_6
 supervisely_face:
   root: data/Supervisely_face
   train: data/splits/supervisely_train.txt
@@ -12,14 +13,13 @@ eg1800:
   valid: data/splits/eg1800_valid.txt
   test: data/splits/eg1800_test.txt
 
-output_path: /workspace/liangjuhao/teaching/PortraitNet/checkpoints/test
+output_path: /workspace/liangjuhao/teaching/PortraitNet/checkpoints/mask_loss_6
 
 istrain: True
 input_height: 224
 input_width: 224
 device: cuda
-# dataset_list: ['eg1800', 'supervisely_face']
-dataset_list: ['eg1800']
+dataset_list: ['eg1800', 'supervisely_face']
 
 padding_color: 128
 img_scale: 1
@@ -31,10 +31,11 @@ train:
   seed: 42
   n_epoch: 2000
   learning_rate: 1e-2
-  learning_rate_step: 10
+  learning_rate_step: 20
   weight_decay: 5e-4
   batch_size: 64
   workers: 4
+  checkpoint_save_interval: 100
   pretrained_state_dict: /workspace/liangjuhao/teaching/PortraitNet/data/pretrained_mobilenetv2_base.pth
 
 portrait:
@@ -43,5 +44,9 @@ portrait:
   temperature: 1
   alpha: 2
   padding_color: 128
+  loss_list: ['loss_mask', 'loss_mask_ori', 'loss_stability_mask', 'loss_stability_edge', 'loss_edge', 'loss_edge_ori']
+  # loss_list: ['loss_mask', 'loss_mask_ori', 'loss_stability_mask', 'loss_edge']
+  # loss_list: ['loss_mask', 'loss_mask_ori', 'loss_stability_mask']
+  # loss_list: ['loss_mask']
 
 hydra/output: null
