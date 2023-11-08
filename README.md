@@ -2,7 +2,6 @@
 Reproduction of paper: "[PortraitNet: Real-time Portrait Segmentation Network for Mobile Device](https://www.sciencedirect.com/science/article/abs/pii/S0097849319300305)"
 
 ## Quick Start
----
 1. Download datasets ([link](https://github.com/dong-x16/PortraitNet))
     - EG1800
     - Supervise-Portrait
