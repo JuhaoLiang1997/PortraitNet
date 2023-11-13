@@ -226,7 +226,6 @@ class PortraitNet(nn.Module):
         pass
 
 if __name__ == '__main__':
-    from torchviz import make_dot
     net = PortraitNet()
     print(net)
     # yaht = net(dummy_data)
